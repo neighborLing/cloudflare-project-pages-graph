@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { useLazyQuery, gql } from '@apollo/client';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const DEEPSEEK_CHAT = gql`
   query DeepSeekChat($messages: [MessageInput!]!, $model: String, $temperature: Float) {
@@ -161,7 +163,34 @@ export default function ChatInterface() {
                   : 'bg-gray-200 dark:bg-gray-700 text-black dark:text-white'
               }`}
             >
-              <div className="whitespace-pre-wrap">{message.content}</div>
+              {message.role === 'assistant' ? (
+                <div className="prose prose-sm max-w-none dark:prose-invert">
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      pre: ({ children }) => (
+                        <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-md overflow-x-auto">
+                          {children}
+                        </pre>
+                      ),
+                      code: ({ children, className }) => {
+                        const isInline = !className;
+                        return isInline ? (
+                          <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm">
+                            {children}
+                          </code>
+                        ) : (
+                          <code className={className}>{children}</code>
+                        );
+                      }
+                    }}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <div className="whitespace-pre-wrap">{message.content}</div>
+              )}
             </div>
           </div>
         ))}
