@@ -51,6 +51,28 @@ const OPENAI_CHAT = gql`
   }
 `;
 
+const WEATHER_AGENT = gql`
+  query WeatherAgent($messages: [MessageInput!]!, $runId: String, $runtimeContext: String) {
+    weatherAgent(messages: $messages, runId: $runId, runtimeContext: $runtimeContext) {
+      success
+      response {
+        id
+        timestamp
+        modelId
+        body {
+          choices {
+            message {
+              role
+              content
+            }
+          }
+        }
+      }
+      error
+    }
+  }
+`;
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -59,11 +81,12 @@ interface Message {
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
-  const [provider, setProvider] = useState<'deepseek' | 'openai'>('deepseek');
+  const [provider, setProvider] = useState<'deepseek' | 'openai' | 'weather'>('deepseek');
   const [isLoading, setIsLoading] = useState(false);
 
   const [deepseekChat] = useLazyQuery(DEEPSEEK_CHAT);
   const [openaiChat] = useLazyQuery(OPENAI_CHAT);
+  const [weatherAgent] = useLazyQuery(WEATHER_AGENT);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,27 +99,59 @@ export default function ChatInterface() {
     setIsLoading(true);
 
     try {
-      const queryFunction = provider === 'deepseek' ? deepseekChat : openaiChat;
-      const { data } = await queryFunction({
-        variables: {
-          messages: updatedMessages.map(msg => ({ role: msg.role, content: msg.content })),
-          model: provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o',
-          ...(provider === 'deepseek' && { temperature: 0.7 })
-        }
-      });
-
-      const response = provider === 'deepseek' ? data.deepseekChat : data.openaiChat;
+      let data;
       
-      if (response.error) {
-        setMessages([...updatedMessages, { 
-          role: 'assistant', 
-          content: `错误: ${response.error}` 
-        }]);
-      } else if (response.choices && response.choices[0]) {
-        setMessages([...updatedMessages, {
-          role: 'assistant',
-          content: response.choices[0].message.content
-        }]);
+      if (provider === 'weather') {
+        const result = await weatherAgent({
+          variables: {
+            messages: updatedMessages.map(msg => ({ role: msg.role, content: msg.content })),
+            runId: 'weatherAgent',
+            runtimeContext: '{}'
+          }
+        });
+        data = result.data;
+        
+        const response = data.weatherAgent;
+        if (!response.success || response.error) {
+          setMessages([...updatedMessages, { 
+            role: 'assistant', 
+            content: `错误: ${response.error || '天气查询失败'}` 
+          }]);
+        } else if (response.response?.body?.choices?.[0]?.message?.content) {
+          setMessages([...updatedMessages, {
+            role: 'assistant',
+            content: response.response.body.choices[0].message.content
+          }]);
+        } else {
+          setMessages([...updatedMessages, { 
+            role: 'assistant', 
+            content: '天气查询返回了空响应' 
+          }]);
+        }
+      } else {
+        const queryFunction = provider === 'deepseek' ? deepseekChat : openaiChat;
+        const result = await queryFunction({
+          variables: {
+            messages: updatedMessages.map(msg => ({ role: msg.role, content: msg.content })),
+            model: provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o',
+            ...(provider === 'deepseek' && { temperature: 0.7 })
+          }
+        });
+        data = result.data;
+
+        const response = provider === 'deepseek' ? data.deepseekChat : data.openaiChat;
+        
+        if (response.error) {
+          setMessages([...updatedMessages, { 
+            role: 'assistant', 
+            content: `错误: ${response.error}` 
+          }]);
+        } else if (response.choices && response.choices[0]) {
+          setMessages([...updatedMessages, {
+            role: 'assistant',
+            content: response.choices[0].message.content
+          }]);
+        }
       }
     } catch (error) {
       setMessages([...updatedMessages, { 
@@ -124,7 +179,7 @@ export default function ChatInterface() {
                 name="provider"
                 value="deepseek"
                 checked={provider === 'deepseek'}
-                onChange={(e) => setProvider(e.target.value as 'deepseek')}
+                onChange={(e) => setProvider(e.target.value as 'deepseek' | 'openai' | 'weather')}
                 className="mr-2"
               />
               DeepSeek
@@ -135,10 +190,21 @@ export default function ChatInterface() {
                 name="provider"
                 value="openai"
                 checked={provider === 'openai'}
-                onChange={(e) => setProvider(e.target.value as 'openai')}
+                onChange={(e) => setProvider(e.target.value as 'deepseek' | 'openai' | 'weather')}
                 className="mr-2"
               />
               OpenAI
+            </label>
+            <label className="flex items-center">
+              <input
+                type="radio"
+                name="provider"
+                value="weather"
+                checked={provider === 'weather'}
+                onChange={(e) => setProvider(e.target.value as 'deepseek' | 'openai' | 'weather')}
+                className="mr-2"
+              />
+              天气助手
             </label>
           </div>
           <button
