@@ -11,7 +11,7 @@ const getGraphQLUri = () => {
   
   return isLocalhost 
     ? 'http://localhost:8787/graphql'
-    : 'https://meadery.win/graphql';
+    : 'https://api.meadery.win';
 };
 
 const httpLink = createHttpLink({
