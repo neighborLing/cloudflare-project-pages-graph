@@ -164,7 +164,7 @@ export default function ChatInterface() {
               />
               DeepSeek
             </label>
-            <label className="flex items-center">
+            {/* <label className="flex items-center">
               <input
                 type="radio"
                 name="provider"
@@ -174,7 +174,7 @@ export default function ChatInterface() {
                 className="mr-2"
               />
               OpenAI
-            </label>
+            </label> */}
             <label className="flex items-center">
               <input
                 type="radio"
