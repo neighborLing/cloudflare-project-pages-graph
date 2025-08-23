@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useLazyQuery, gql } from '@apollo/client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { mastraClient } from '../../lib/mastra-client';
 
 const DEEPSEEK_CHAT = gql`
   query DeepSeekChat($messages: [MessageInput!]!, $model: String, $temperature: Float) {
@@ -51,27 +52,7 @@ const OPENAI_CHAT = gql`
   }
 `;
 
-const WEATHER_AGENT = gql`
-  query WeatherAgent($messages: [MessageInput!]!, $runId: String, $runtimeContext: String) {
-    weatherAgent(messages: $messages, runId: $runId, runtimeContext: $runtimeContext) {
-      success
-      response {
-        id
-        timestamp
-        modelId
-        body {
-          choices {
-            message {
-              role
-              content
-            }
-          }
-        }
-      }
-      error
-    }
-  }
-`;
+// Weather agent using Mastra Client instead of GraphQL
 
 interface Message {
   role: 'user' | 'assistant';
@@ -86,7 +67,6 @@ export default function ChatInterface() {
 
   const [deepseekChat] = useLazyQuery(DEEPSEEK_CHAT);
   const [openaiChat] = useLazyQuery(OPENAI_CHAT);
-  const [weatherAgent] = useLazyQuery(WEATHER_AGENT);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,30 +82,30 @@ export default function ChatInterface() {
       let data;
       
       if (provider === 'weather') {
-        const result = await weatherAgent({
-          variables: {
-            messages: updatedMessages.map(msg => ({ role: msg.role, content: msg.content })),
-            runId: 'weatherAgent',
-            runtimeContext: '{}'
+        try {
+          // Get weather agent using Mastra Client
+          const agent = mastraClient.getAgent("weatherAgent");
+          
+          // Generate response using the agent
+          const response = await agent.generate({
+            messages: updatedMessages.map(msg => ({ role: msg.role, content: msg.content }))
+          });
+          
+          if (response && response.text) {
+            setMessages([...updatedMessages, {
+              role: 'assistant',
+              content: response.text
+            }]);
+          } else {
+            setMessages([...updatedMessages, { 
+              role: 'assistant', 
+              content: '天气查询返回了空响应' 
+            }]);
           }
-        });
-        data = result.data;
-        
-        const response = data.weatherAgent;
-        if (!response.success || response.error) {
+        } catch (error) {
           setMessages([...updatedMessages, { 
             role: 'assistant', 
-            content: `错误: ${response.error || '天气查询失败'}` 
-          }]);
-        } else if (response.response?.body?.choices?.[0]?.message?.content) {
-          setMessages([...updatedMessages, {
-            role: 'assistant',
-            content: response.response.body.choices[0].message.content
-          }]);
-        } else {
-          setMessages([...updatedMessages, { 
-            role: 'assistant', 
-            content: '天气查询返回了空响应' 
+            content: `天气查询失败: ${error instanceof Error ? error.message : '未知错误'}` 
           }]);
         }
       } else {
